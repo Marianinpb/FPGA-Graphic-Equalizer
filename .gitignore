@@ -1,0 +1,21 @@
+# Quartus
+output_files/
+db/
+incremental_db/
+*.rpt
+*.summary
+*.done
+*.eqn
+*.pin
+*.pof
+*.sof
+*.smsg
+*.jdi
+*.sld
+*.qws
+*.bak
+
+# Manuals and resources
+Manual/
+recursos_utiles/
+Proyecto_descripcion.txt
