@@ -2,10 +2,13 @@
 
 This project implements an 8-band digital graphic equalizer on an Altera DE2-115 FPGA board.
 
-## Current Progress (Phase 1)
+## Current Progress
+
+### ✅ Phase 1 — UI & VGA Display (Stable — Compiles & Tested on Hardware)
 - **VGA Interface**: Displays 8 vertical bars corresponding to the gain of each frequency band (640x480 @ 60Hz).
 - **User Interface**: Handles button debouncing and a state machine to select and edit the gain of individual bands using physical switches and buttons.
 - **Top Level Integration**: Maps the internal modules to the DE2-115 physical pins.
+- **Clock Generation**: 25MHz pixel clock derived from 50MHz board clock via simple divider (no PLL IP required).
 
 ## Hardware Requirements
 - Altera DE2-115 Development Board
