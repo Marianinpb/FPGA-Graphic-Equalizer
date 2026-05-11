@@ -11,7 +11,8 @@ ENTITY VGA_SYNC IS
 			pixel_row, pixel_column: OUT STD_LOGIC_VECTOR(9 DOWNTO 0));
 END VGA_SYNC;
 ARCHITECTURE a OF VGA_SYNC IS
-	SIGNAL horiz_sync, vert_sync, pixel_clock_int : STD_LOGIC;
+	SIGNAL horiz_sync, vert_sync : STD_LOGIC;
+	SIGNAL pixel_clock_int : STD_LOGIC := '0';
 	SIGNAL video_on_int, video_on_v, video_on_h : STD_LOGIC;
 	SIGNAL h_count, v_count :STD_LOGIC_VECTOR(9 DOWNTO 0);
 --
@@ -30,22 +31,16 @@ ARCHITECTURE a OF VGA_SYNC IS
 	CONSTANT V_sync_low: 		Natural := 491;
 	CONSTANT V_sync_high: 		Natural := 493;
 	CONSTANT V_end_count: 		Natural := 525;
-	COMPONENT video_PLL
-	PORT
-	(
-		inclk0		: IN STD_LOGIC  := '0';
-		c0			: OUT STD_LOGIC 
-	);
-end component;
-
 BEGIN
 
--- PLL below is used to generate the pixel clock frequency
--- Uses UP 3's 48Mhz USB clock for PLL's input clock
-video_PLL_inst : video_PLL PORT MAP (
-		inclk0	 => Clock_50Mhz,
-		c0	 => pixel_clock_int
-	);
+-- Generate 25MHz pixel clock from 50MHz input by dividing by 2
+-- 25MHz is within 5% of the required 25.175MHz for 640x480@60Hz
+PROCESS(clock_50Mhz)
+BEGIN
+	IF clock_50Mhz'EVENT AND clock_50Mhz = '1' THEN
+		pixel_clock_int <= NOT pixel_clock_int;
+	END IF;
+END PROCESS;
 
 -- video_on is high only when RGB pixel data is being displayed
 -- used to blank color signals at screen edges during retrace
