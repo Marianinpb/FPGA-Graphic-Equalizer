@@ -8,6 +8,12 @@ set_global_assignment -name VHDL_FILE src/user_interface.vhd
 set_global_assignment -name VHDL_FILE src/vga_sync.vhd
 set_global_assignment -name VHDL_FILE src/vga_drawer.vhd
 set_global_assignment -name VHDL_FILE src/top_equalizer.vhd
+set_global_assignment -name VHDL_FILE src/iir_biquad.vhd
+set_global_assignment -name VHDL_FILE src/coeff_rom.vhd
+set_global_assignment -name VHDL_FILE src/filter_bank.vhd
+set_global_assignment -name VHDL_FILE src/i2c.vhd
+set_global_assignment -name VHDL_FILE src/Audio.vhd
+set_global_assignment -name QIP_FILE  src/AudioPLL.qip
 
 set_location_assignment PIN_Y2 -to CLOCK_50
 set_location_assignment PIN_M23 -to KEY[0]
@@ -51,6 +57,16 @@ set_location_assignment PIN_C13 -to VGA_VS
 set_location_assignment PIN_A12 -to VGA_CLK
 set_location_assignment PIN_F11 -to VGA_BLANK_N
 set_location_assignment PIN_C10 -to VGA_SYNC_N
+
+# Audio Codec WM8731 pin assignments (from Echo_Test.qsf)
+set_location_assignment PIN_B7  -to I2C_SCLK
+set_location_assignment PIN_A8  -to I2C_SDAT
+set_location_assignment PIN_C2  -to AUD_ADCLRCK
+set_location_assignment PIN_D2  -to AUD_ADCDAT
+set_location_assignment PIN_E3  -to AUD_DACLRCK
+set_location_assignment PIN_D1  -to AUD_DACDAT
+set_location_assignment PIN_E1  -to AUD_XCK
+set_location_assignment PIN_F2  -to AUD_BCLK
 
 set_global_assignment -name LAST_QUARTUS_VERSION "23.1std.1 Lite Edition"
 set_global_assignment -name PARTITION_NETLIST_TYPE SOURCE -section_id Top
