@@ -64,6 +64,20 @@ architecture Structural of top_equalizer is
     signal filter_valid  : std_logic;           -- filter_bank output valid pulse
 
     -- -------------------------------------------------------------------------
+    -- Sincronizador de Ldone: AUD_XCK (18.432 MHz) -> CLOCK_50 (50 MHz)
+    -- Ldone es un pulso de ~54 ns en el dominio de AUD_XCK.
+    -- Sin sincronizar, puede causar metaestabilidad en CLOCK_50.
+    -- Usamos 2 flip-flops en cascada + detector de flanco ascendente.
+    -- -------------------------------------------------------------------------
+    signal Ldone_meta  : std_logic := '0';  -- 1er FF (puede ser metaestable)
+    signal Ldone_sync  : std_logic := '0';  -- 2do FF (estable)
+    signal Ldone_prev  : std_logic := '0';  -- Para detectar flanco
+    signal Ldone_pulse : std_logic;         -- Pulso limpio de 1 ciclo CLOCK_50
+
+    -- Muestra de audio capturada sincrona a CLOCK_50
+    signal Lin_latched : signed(15 downto 0) := (others => '0');
+
+    -- -------------------------------------------------------------------------
     -- Component declaration for VGA_SYNC (legacy component from resources)
     -- -------------------------------------------------------------------------
     component VGA_SYNC
@@ -155,10 +169,10 @@ begin
     VGA_SYNC_N  <= '0';
 
     -- =========================================================================
-    -- Audio Codec WM8731 (Fase 2 - nuevo)
+    -- Audio Codec WM8731 (Fase 2)
     -- Configura el codec via I2C al arrancar y maneja el flujo I2S.
     -- Genera Lin/Rin (ADC) y consume Lout/Rout (DAC).
-    -- Ldone/Rdone son pulsos de 1 ciclo que indican "nueva muestra lista".
+    -- Ldone/Rdone son pulsos de 1 ciclo (AUD_XCK) que indican "nueva muestra".
     -- El AudioPLL interno genera 18.432 MHz (AUD_XCK) desde los 50 MHz.
     -- =========================================================================
     audio_inst: entity work.Audio
@@ -183,27 +197,55 @@ begin
         );
 
     -- =========================================================================
-    -- Banco de Filtros IIR (Fase 2 - nuevo)
-    -- Ldone del codec sirve como sample_en (nuevo sample cada ~20.8 us @ 48kHz).
-    -- Procesa el canal izquierdo (Lin). La salida ecualizada se envia a ambos
-    -- canales del DAC (mono).
+    -- Sincronizador de Ldone: AUD_XCK -> CLOCK_50
+    -- 2 flip-flops en cascada + detector de flanco ascendente
+    -- Genera Ldone_pulse: pulso limpio de exactamente 1 ciclo de CLOCK_50
+    -- =========================================================================
+    process(CLOCK_50, reset)
+    begin
+        if reset = '1' then
+            Ldone_meta  <= '0';
+            Ldone_sync  <= '0';
+            Ldone_prev  <= '0';
+            Lin_latched <= (others => '0');
+        elsif rising_edge(CLOCK_50) then
+            -- Cadena de sincronizacion de 2 FF
+            Ldone_meta <= Ldone;
+            Ldone_sync <= Ldone_meta;
+            Ldone_prev <= Ldone_sync;
+            -- Capturar Lin cuando detectamos el flanco de Ldone
+            -- Lin viene del dominio AUD_XCK pero ya esta estable cuando Ldone sube
+            if Ldone_sync = '1' and Ldone_prev = '0' then
+                Lin_latched <= Lin;
+            end if;
+        end if;
+    end process;
+
+    -- Pulso de 1 ciclo en flanco ascendente de Ldone_sync
+    Ldone_pulse <= Ldone_sync and (not Ldone_prev);
+
+    -- =========================================================================
+    -- Banco de Filtros IIR (Fase 2/3)
+    -- Usa Ldone_pulse (sincronizado a CLOCK_50) como sample_en.
+    -- Usa Lin_latched (capturado sincrono a CLOCK_50) como entrada de audio.
     -- =========================================================================
     fb_inst: entity work.filter_bank
         port map(
             clk       => CLOCK_50,
             reset     => reset,
-            sample_en => Ldone,         -- Pulse from codec: new sample available
-            audio_in  => Lin,           -- Left channel from ADC
-            gains     => gains,         -- 8-band gains from user interface
-            audio_out => audio_out_eq,  -- Equalized output
+            sample_en => Ldone_pulse,     -- Pulso sincronizado a CLOCK_50
+            audio_in  => Lin_latched,     -- Audio capturado sincrono
+            gains     => gains,
+            audio_out => audio_out_eq,
             valid_out => filter_valid
         );
 
     -- =========================================================================
     -- Conectar salida del ecualizador al DAC
-    -- Proceso registrado para evitar latches y mantener la sincronia con el
-    -- protocolo I2S del codec (Lout/Rout deben ser estables hasta el siguiente
-    -- Ldone/Rdone).
+    -- Proceso registrado: Lout/Rout se mantienen estables hasta el siguiente
+    -- filter_valid, lo cual ocurre ~7 ciclos de CLOCK_50 despues de Ldone.
+    -- Audio.vhd lee Lout bit por bit durante el siguiente periodo LRCK
+    -- (~20.8 us despues), asi que Lout tiene tiempo de sobra para estabilizarse.
     -- =========================================================================
     process(CLOCK_50, reset)
     begin
@@ -212,8 +254,8 @@ begin
             Rout <= (others => '0');
         elsif rising_edge(CLOCK_50) then
             if filter_valid = '1' then
-                Lout <= audio_out_eq;   -- Canal izquierdo ecualizado
-                Rout <= audio_out_eq;   -- Canal derecho = mismo (mono)
+                Lout <= audio_out_eq;
+                Rout <= audio_out_eq;
             end if;
         end if;
     end process;
