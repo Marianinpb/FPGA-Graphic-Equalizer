@@ -36,10 +36,12 @@ end filter_bank;
 architecture Behavioral of filter_bank is
 
     -- -------------------------------------------------------------------------
-    -- Inversion de polaridad en bandas alternas para suavizar valles de fase.
-    -- Cambiar a false para deshabilitar (util para comparacion en el reporte).
+    -- Inversion de polaridad en bandas alternas.
+    -- Para filtros Butterworth (Q=0.707) como los que estamos usando, esto DEBE
+    -- ser false, de lo contrario se cancelan mutuamente en los puntos de cruce
+    -- creando huecos profundos en la respuesta de frecuencia.
     -- -------------------------------------------------------------------------
-    constant INVERT_ALT_BANDS : boolean := true;
+    constant INVERT_ALT_BANDS : boolean := false;
 
     -- -------------------------------------------------------------------------
     -- Arrays de seniales internas para conectar las 8 instancias de iir_biquad

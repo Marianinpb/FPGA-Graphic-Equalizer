@@ -71,7 +71,8 @@ architecture Behavioral of iir_biquad is
     signal p_a2 : signed(39 downto 0) := (others => '0');
 
     -- Acumulador  (42 bits = margen para sumar 5 productos de ancho mixto)
-    signal acc : signed(41 downto 0) := (others => '0');
+    -- NOTA: Eliminamos la senal 'acc' y usamos una variable dentro del proceso
+    -- para evitar el retraso de 1 ciclo en la retroalimentacion.
 
     -- Salida extendida antes de saturar
     signal y_ext : signed(FEEDBACK_BITS-1 downto 0) := (others => '0');
@@ -82,6 +83,8 @@ begin
     -- Pipeline de 3 etapas
     -- -------------------------------------------------------------------------
     process(clk, reset)
+        -- Variable para el acumulador (se actualiza inmediatamente)
+        variable acc_v : signed(41 downto 0);
     begin
         if reset = '1' then
             state     <= IDLE;
@@ -95,7 +98,6 @@ begin
             p_b2      <= (others => '0');
             p_a1      <= (others => '0');
             p_a2      <= (others => '0');
-            acc       <= (others => '0');
             y_ext     <= (others => '0');
             y_out     <= (others => '0');
             valid_out <= '0';
@@ -148,36 +150,36 @@ begin
                 -- -----------------------------------------------------------------
                 when S3_ACC =>
                     -- Extender todos los operandos a 42 bits con signo
-                    acc <= resize(p_b0, 42)
-                         + resize(p_b1, 42)
-                         + resize(p_b2, 42)
-                         - resize(p_a1, 42)
-                         - resize(p_a2, 42);
+                    acc_v := resize(p_b0, 42)
+                           + resize(p_b1, 42)
+                           + resize(p_b2, 42)
+                           - resize(p_a1, 42)
+                           - resize(p_a2, 42);
 
                     -- Shift aritmetico a la derecha por FRAC_BITS (14)
                     -- acc tiene formato Q(2+2).(14+14) = Q4.28 tras la mult
                     -- >>14 => Q4.14, los bits [27:14] son la parte entera+frac Q1.15
                     -- Tomamos bits [27:0] del acc desplazado como y_ext (28 bits)
                     -- Guardamos 24 bits en y_n1 para la proxima iteracion
-                    y_ext <= resize(shift_right(acc, FRAC_BITS), FEEDBACK_BITS);
+                    y_ext <= resize(shift_right(acc_v, FRAC_BITS), FEEDBACK_BITS);
 
                     -- Actualizar registros de retardo
                     x_n2 <= x_n1;
                     x_n1 <= x_cur;
                     y_n2 <= y_n1;
                     -- y_n1 recibe y_ext en el proximo ciclo (usa valor registrado)
-                    y_n1 <= resize(shift_right(acc, FRAC_BITS), FEEDBACK_BITS);
+                    y_n1 <= resize(shift_right(acc_v, FRAC_BITS), FEEDBACK_BITS);
 
                     -- Saturacion a 16 bits con signo (Q1.15)
-                    -- El resultado util esta en acc[27:14] (desplazado >>14)
+                    -- El resultado util esta en acc_v[27:14] (desplazado >>14)
                     -- y_ext tiene 24 bits; si los bits [23:15] no son todos
                     -- iguales al bit de signo, hay overflow -> saturar
-                    if shift_right(acc, FRAC_BITS) > to_signed(32767, 42) then
+                    if shift_right(acc_v, FRAC_BITS) > to_signed(32767, 42) then
                         y_out <= to_signed(32767, 16);   -- +1.0 saturado
-                    elsif shift_right(acc, FRAC_BITS) < to_signed(-32768, 42) then
+                    elsif shift_right(acc_v, FRAC_BITS) < to_signed(-32768, 42) then
                         y_out <= to_signed(-32768, 16);  -- -1.0 saturado
                     else
-                        y_out <= resize(shift_right(acc, FRAC_BITS), 16);
+                        y_out <= resize(shift_right(acc_v, FRAC_BITS), 16);
                     end if;
 
                     valid_out <= '1';
